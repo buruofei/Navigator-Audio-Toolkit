@@ -308,26 +308,70 @@ class DragDropWidget(QWidget):
             return self.tr("无法分析 {}: {}").format(file_path, str(e))
 
 
-class DragDropLineEdit(QLineEdit):
+class DragDropLineEdit(QWidget):
     files_dropped = pyqtSignal()
 
     def __init__(self, parent=None):
         super().__init__(parent)
+        self.file_paths = []
+        self.initUI()
+
+    def initUI(self):
+        # Avoid the maximum text length limit of QLineEdit
+        self.layout = QVBoxLayout(self)
+        self.layout.setContentsMargins(0, 0, 0, 0)
+
+        # Display widget - shows summary and sample of files
+        self.display_edit = QLineEdit(self)
+        self.display_edit.setReadOnly(True)
+        self.layout.addWidget(self.display_edit)
+
         self.setAcceptDrops(True)
+        self.updateDisplay()
 
     def dragEnterEvent(self, event):
         if event.mimeData().hasUrls():
             event.acceptProposedAction()
-        else:
-            super().dragEnterEvent(event)
 
     def dropEvent(self, event):
-        if event.mimeData().hasUrls():
-            paths = [url.toLocalFile() for url in event.mimeData().urls()]
-            self.setText('⁏'.join(paths))  # Merge Paths
-            self.files_dropped.emit()
+        file_paths = [url.toLocalFile() for url in event.mimeData().urls()]
+        self.addFiles(file_paths)
+        self.files_dropped.emit()
+
+    def addFiles(self, new_paths):
+        # Add new files to the list, avoiding duplicates
+        self.clear()
+        self.file_paths.extend(path for path in new_paths if path not in self.file_paths)
+        self.updateDisplay()
+
+    def updateDisplay(self):
+        if not self.file_paths:
+            self.display_edit.clear()
+            return
+
+        total_files = len(self.file_paths)
+        if total_files <= 3:
+            # If 3 or fewer files, show all
+            display_text = ' ⁏ '.join(self.file_paths)
         else:
-            super().dropEvent(event)
+            # If more than 3 files, show first 2 and last one with count
+            display_text = f"{self.file_paths[0]} ⁏ {self.file_paths[1]} ... {self.file_paths[-1]} ({self.tr('共')} {total_files} {self.tr('个文件')})"
+
+        self.display_edit.setText(display_text)
+
+    def clear(self):
+        self.file_paths = []
+        self.updateDisplay()
+
+    def text(self):
+        return '⁏'.join(self.file_paths)
+
+    def setText(self, text):
+        if text:
+            self.file_paths = text.split('⁏')
+        else:
+            self.file_paths = []
+        self.updateDisplay()
 
 
 class ConversionManager(QThread):
@@ -471,7 +515,7 @@ class AudioConverter(QWidget):
         base_width, base_height = 650, 450
         scaled_width = int(base_width * scaling_factor)
         scaled_height = int(base_height * scaling_factor)
-        self.setWindowTitle(self.tr('未鸟的音频工具箱 v0.1.1'))
+        self.setWindowTitle(self.tr('未鸟的音频工具箱 v0.1.2'))
         self.setGeometry(100, 100, scaled_width, scaled_height)
 
         # Scale the font, in theory this is redundant but there are strange special cases
@@ -805,11 +849,11 @@ class AudioConverter(QWidget):
         file_dialog.setFileMode(QFileDialog.ExistingFiles)
         if file_dialog.exec_():
             files = file_dialog.selectedFiles()
-            self.input_edit.setText('⁏'.join(files))
+            self.input_edit.addFiles(files)
             self.update_file_count()
 
     def update_file_count(self):
-        file_count = len(self.input_edit.text().split('⁏')) if self.input_edit.text() else 0
+        file_count = len(self.input_edit.file_paths)
         self.file_count_label.setText(self.tr('当前总待处理文件数: {}').format(file_count))
 
     def select_output(self):
@@ -996,7 +1040,7 @@ class AudioConverter(QWidget):
 
     def start_conversion(self):
         self.progress_text_edit.clear()
-        input_paths = self.input_edit.text().split('⁏')
+        input_paths = self.input_edit.file_paths
         output_folder = self.output_edit.text()
         ffmpeg_path = self.ffmpeg_edit.text()
 
@@ -1249,7 +1293,7 @@ class AudioConverter(QWidget):
         self.convert_button.setStyleSheet("")
 
     def save_settings(self):
-        self.settings.setValue("input_path", self.input_edit.text())
+        self.settings.setValue("input_paths", self.input_edit.file_paths)
         self.settings.setValue("output_path", self.output_edit.text())
         self.settings.setValue("ffmpeg_path", self.ffmpeg_edit.text())
         self.settings.setValue("ffprobe_path", self.file_info_tab.ffprobe_edit.text())
@@ -1264,7 +1308,9 @@ class AudioConverter(QWidget):
         self.settings.setValue("process_count", self.process_count_spinbox.value())
 
     def load_settings(self):
-        self.input_edit.setText(self.settings.value("input_path", ""))
+        input_paths = self.settings.value("input_paths", [])
+        if input_paths:
+            self.input_edit.setText('⁏'.join(input_paths))
         self.output_edit.setText(self.settings.value("output_path", ""))
         ffmpeg_path = self.settings.value("ffmpeg_path", "")
         ffprobe_path = self.settings.value("ffprobe_path", "")
