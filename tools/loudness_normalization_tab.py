@@ -53,10 +53,7 @@ class LoudnessNormalizationWorker(QThread):
                 cmd.extend([f"--{key}", str(value)])
         cmd.extend([self.input_dir, self.output_dir])
 
-        startupinfo = subprocess.STARTUPINFO()
-        startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
-
-        process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, universal_newlines=True, startupinfo=startupinfo)
+        process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, universal_newlines=True)
 
         for line in process.stdout:
             self.progress.emit(line.strip())
@@ -281,6 +278,7 @@ class LoudnessNormalizationTab(QWidget):
     def open_directory(self, line_edit):
         directory = line_edit.text()
         if directory and os.path.isdir(directory):
-            os.startfile(directory)
+            # 替换 os.startfile 为 macOS 的打开方式
+            subprocess.run(['open', directory])
         else:
             QMessageBox.warning(self, self.tr("错误"), self.tr("无效的目录路径"))

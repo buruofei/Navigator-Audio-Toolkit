@@ -17,7 +17,7 @@ class SliceAudioWorker(QThread):
 
     def run(self):
         try:
-            result = subprocess.run(self.command, capture_output=True, text=True, check=True, creationflags=subprocess.CREATE_NO_WINDOW)
+            result = subprocess.run(self.command, capture_output=True, text=True, check=True)
             self.finished.emit(result.stdout)
         except subprocess.CalledProcessError as e:
             self.finished.emit(f"Error: {e.stderr}")
@@ -262,6 +262,7 @@ class SliceAudioTab(QWidget):
     def open_directory(self, line_edit):
         directory = line_edit.text()
         if directory and os.path.isdir(directory):
-            os.startfile(directory)
+            # 替换 os.startfile 为 macOS 的打开方式
+            subprocess.run(['open', directory])
         else:
             QMessageBox.warning(self, self.tr("错误"), self.tr("无效的目录路径"))

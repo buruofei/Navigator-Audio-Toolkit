@@ -8,8 +8,6 @@ import subprocess
 import re
 import locale
 import html
-import win32process
-import win32con
 
 
 class FapAnalysisTab(QWidget):
@@ -275,7 +273,8 @@ class FapAnalysisTab(QWidget):
     def open_directory(self, line_edit):
         directory = line_edit.text()
         if directory and os.path.isdir(directory):
-            os.startfile(directory)
+            # 替换 os.startfile 为 macOS 的打开方式
+            subprocess.run(['open', directory])
         else:
             QMessageBox.warning(self, self.tr("错误"), self.tr("无效的目录路径"))
 
@@ -292,14 +291,11 @@ class CommandWorker(QThread):
         try:
             system_encoding = locale.getpreferredencoding()
 
-            # Force Matplotlib to use TkAgg backend to avoid display failures
+            # Force Matplotlib to use TkAgg backend
             env = os.environ.copy()
             env['MPLBACKEND'] = 'TkAgg'
 
-            startupinfo = subprocess.STARTUPINFO()
-            startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
-            startupinfo.wShowWindow = win32con.SW_HIDE
-
+            # 移除 Windows 特定的 startupinfo 和 creationflags
             process = subprocess.Popen(
                 self.cmd,
                 stdout=subprocess.PIPE,
@@ -309,8 +305,6 @@ class CommandWorker(QThread):
                 errors='replace',
                 bufsize=1,
                 universal_newlines=True,
-                startupinfo=startupinfo,
-                creationflags=win32process.CREATE_NO_WINDOW,
                 env=env
             )
 

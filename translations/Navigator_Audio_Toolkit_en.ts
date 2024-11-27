@@ -28,7 +28,7 @@
     <name>AudioConverter</name>
     <message>
         <location filename="../navigator_audio_toolkit.py" line="474"/>
-        <source>未鸟的音频工具箱 v0.1</source>
+        <source>步若飞爆改未鸟的音频工具箱 v0.1</source>
         <translation type="obsolete">Navigator Audio Toolkit v0.1</translation>
     </message>
     <message>
@@ -187,7 +187,7 @@
 
 改后缀并不是转格式，请告诉每一个试图这么干的人并把这个软件塞给他！
 
-                                               by  领航员未鸟</source>
+                                               by  领航员步若飞爆改未鸟</source>
         <translation>GitHub：https://github.com/AliceNavigator/Navigator-Audio-Toolkit
 
     Changing file extensions isn&apos;t magic! Tell every sneaky file-renamer you know and shove this software into their hands!
@@ -459,12 +459,12 @@ Additionally, please make good use of the file information page. By dragging med
     </message>
     <message>
         <location filename="../navigator_audio_toolkit.py" line="474"/>
-        <source>未鸟的音频工具箱 v0.1.1</source>
+        <source>步若飞爆改未鸟的音频工具箱 v0.1.1</source>
         <translation type="obsolete">Navigator Audio Toolkit v0.1.1</translation>
     </message>
     <message>
         <location filename="../navigator_audio_toolkit.py" line="518"/>
-        <source>未鸟的音频工具箱 v0.1.2</source>
+        <source>步若飞爆改未鸟的音频工具箱 v0.1.2</source>
         <translation>Navigator Audio Toolkit v0.1.2</translation>
     </message>
 </context>

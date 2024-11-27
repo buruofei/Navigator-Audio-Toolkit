@@ -20,6 +20,7 @@ import tempfile
 import multiprocessing
 import queue
 from multiprocessing import Pool, Manager
+import logging
 
 FORMAT_PARAMS = {
     'mp3': {
@@ -95,22 +96,17 @@ def get_base_path():
 
 
 def get_translator_path():
-    language = get_language()
-
-    base_path = get_base_path()
-
+    """获取翻译文件路径"""
+    base_path = os.path.dirname(os.path.abspath(__file__))
     possible_paths = [
-        os.path.join(base_path, "translations", f"Navigator_Audio_Toolkit_{language}.qm"),
-        os.path.join(base_path, f"Navigator_Audio_Toolkit_{language}.qm"),
+        os.path.join(base_path, 'translations', f'Navigator_Audio_Toolkit_zh.qm'),
+        os.path.join(base_path, f'Navigator_Audio_Toolkit_zh.qm')
     ]
-
-    for translations_path in possible_paths:
-        print(f"Attempting to load translations from: {translations_path}")
-        if os.path.exists(translations_path):
-            print("translations found!")
-            return translations_path
-
-    print("Failed to load translator")
+    
+    for path in possible_paths:
+        if os.path.exists(path):
+            return path
+    return None
 
 
 def remove_screen_splash():
@@ -134,11 +130,14 @@ def convert_file(args):
     command.append(output_file)
 
     try:
-        startupinfo = subprocess.STARTUPINFO()
-        startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
-
-        process = subprocess.Popen(command, stderr=subprocess.PIPE, stdout=subprocess.PIPE,
-                                   text=True, encoding='utf-8', errors='replace', startupinfo=startupinfo)
+        process = subprocess.Popen(
+            command,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            encoding='utf-8',
+            errors='replace'
+        )
 
         while True:
             line = process.stderr.readline()
@@ -465,6 +464,7 @@ class AudioConverter(QWidget):
         self.slice_audio_tab = None
         self.loudness_tab = None
         self.tab_widget = None
+        self.ffmpeg_encoders = []
         self.initUI()
         self.update_params()
         self.setWindowIcon(QIcon(":/images/icon.ico"))
@@ -515,7 +515,7 @@ class AudioConverter(QWidget):
         base_width, base_height = 650, 450
         scaled_width = int(base_width * scaling_factor)
         scaled_height = int(base_height * scaling_factor)
-        self.setWindowTitle(self.tr('未鸟的音频工具箱 v0.1.2'))
+        self.setWindowTitle(self.tr('步若飞爆改未鸟的音频工具箱 v0.1.2'))
         self.setGeometry(100, 100, scaled_width, scaled_height)
 
         # Scale the font, in theory this is redundant but there are strange special cases
@@ -629,7 +629,7 @@ class AudioConverter(QWidget):
 
         channels_layout = QHBoxLayout()
         self.channels_combo = QComboBox()
-        self.channels_combo.addItems([self.tr('与源相同'), self.tr('单声道'), self.tr('立体声')])
+        self.channels_combo.addItems([self.tr('与源相'), self.tr('单声道'), self.tr('立体声')])
         channels_layout.addWidget(QLabel(self.tr('声道:')))
         channels_layout.addWidget(self.channels_combo)
 
@@ -741,9 +741,9 @@ class AudioConverter(QWidget):
         self.progress_text_edit = QTextEdit()
         self.progress_text_edit.setReadOnly(True)
         self.progress_text_edit.setPlaceholderText(
-            self.tr("GitHub开源地址：https://github.com/AliceNavigator/Navigator-Audio-Toolkit\n\n"
+            self.tr("感谢GitHub开源地址：https://github.com/AliceNavigator/Navigator-Audio-Toolkit\n\n"
                     "改后缀并不是转格式，请告诉每一个试图这么干的人并把这个软件塞给他！\n\n"
-                    "                                               by  领航员未鸟"))
+                    "                                               by  步若飞"))
         main_tab_layout.addWidget(self.progress_text_edit)
 
         self.setLayout(main_layout)
@@ -764,7 +764,7 @@ class AudioConverter(QWidget):
     def open_output_folder(self):
         output_folder = self.output_edit.text()
         if os.path.isdir(output_folder):
-            QDesktopServices.openUrl(QUrl.fromLocalFile(output_folder))
+            subprocess.run(['open', output_folder])
         else:
             QMessageBox.warning(self, self.tr('警告'), self.tr('输出文件夹无效'))
 
@@ -795,29 +795,34 @@ class AudioConverter(QWidget):
 
     def is_valid_ffmpeg(self, path):
         try:
-            result = subprocess.run([path, '-version'], check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                                    creationflags=subprocess.CREATE_NO_WINDOW, text=True, encoding='utf-8',
-                                    errors='replace')
+            result = subprocess.run([path, '-version'], 
+                                  stdout=subprocess.PIPE, 
+                                  stderr=subprocess.PIPE,
+                                  text=True, 
+                                  encoding='utf-8',
+                                  errors='replace')
             return "ffmpeg version" in result.stdout
         except (FileNotFoundError, subprocess.CalledProcessError):
             return False
 
-    def update_ffmpeg_capabilities(self, ffmpeg_path):
-        result = subprocess.run([ffmpeg_path, '-version'], check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                                creationflags=subprocess.CREATE_NO_WINDOW, text=True, encoding='utf-8',
-                                errors='replace')
-
-        if '--enable-libsoxr' in result.stdout:
-            self.resampler = 'soxr'
-        else:
-            self.resampler = 'default'
-
-        if '--enable-libfdk-aac' in result.stdout:
-            # libfdk_aac cuts off the spectrum at around 17kHz, which I don't like. It can be enabled if necessary, but for now, the built-in encoder performs better.
-            self.aac_encoder = 'aac'
-            # self.aac_encoder = 'libfdk_aac'
-        else:
-            self.aac_encoder = 'aac'
+    def update_ffmpeg_capabilities(self, path):
+        try:
+            result = subprocess.run([path, '-encoders'], 
+                                  stdout=subprocess.PIPE, 
+                                  stderr=subprocess.PIPE,
+                                  text=True, 
+                                  encoding='utf-8',
+                                  errors='replace')
+            
+            if result.returncode == 0:
+                self.ffmpeg_encoders = self.parse_ffmpeg_encoders(result.stdout)
+                self.update_encoder_combobox()
+            else:
+                QMessageBox.warning(self, self.tr('警告'),
+                                  self.tr('无法获取FFmpeg编码器列表'))
+        except Exception as e:
+            QMessageBox.warning(self, self.tr('警告'),
+                              self.tr('检查FFmpeg编码器时出错: {}').format(str(e)))
 
     def check_ffprobe(self):
         # Check the path in the edit box first
@@ -826,20 +831,29 @@ class AudioConverter(QWidget):
             return
 
         # Then check in the system PATH
-        ffprobe_path = shutil.which('ffprobe')
-        if ffprobe_path:
-            self.file_info_tab.ffprobe_edit.setText(ffprobe_path)
-            return
+        # 在 macOS 中通常安装在 /usr/local/bin/ffprobe
+        default_paths = [
+            '/usr/local/bin/ffprobe',  # Homebrew 安装路径
+            '/opt/homebrew/bin/ffprobe',  # Apple Silicon Homebrew 路径
+            shutil.which('ffprobe')  # 系统 PATH 查找
+        ]
+        
+        for path in default_paths:
+            if path and self.is_valid_ffprobe(path):
+                self.file_info_tab.ffprobe_edit.setText(path)
+                return
 
-        # If we get here, no valid FFprobe was found
         QMessageBox.warning(self, self.tr('警告'),
-                            self.tr('FFprobe未在系统PATH或指定路径中找到，请手动指定正确的FFprobe路径'))
+                           self.tr('FFprobe未在系统PATH或指定路径中找到，请手动指定正确的FFprobe路径'))
 
     def is_valid_ffprobe(self, path):
         try:
-            result = subprocess.run([path, '-version'], check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                                    creationflags=subprocess.CREATE_NO_WINDOW, text=True, encoding='utf-8',
-                                    errors='replace')
+            result = subprocess.run([path, '-version'], 
+                                  stdout=subprocess.PIPE, 
+                                  stderr=subprocess.PIPE,
+                                  text=True, 
+                                  encoding='utf-8',
+                                  errors='replace')
             return "ffprobe version" in result.stdout
         except (FileNotFoundError, subprocess.CalledProcessError):
             return False
@@ -1009,7 +1023,7 @@ class AudioConverter(QWidget):
             input_channels = self.get_input_audio_channels(input_file)
 
             if input_channels is None:
-                self.progress_text_edit.append(self.tr('警告：无法获取输入文件的声道信息: {}\n将跳过此文件的声道相关检查。').format(input_file))
+                self.progress_text_edit.append(self.tr('警告：无法获取输入文件的声道信息: {}\n将过此文件的声道相关检查。').format(input_file))
                 continue  # Skip channel-related checks for this file
 
             is_mono = is_mono_setting or (is_source_setting and input_channels == 1)
@@ -1268,9 +1282,9 @@ class AudioConverter(QWidget):
             failed_files_text_edit.setPlainText(failed_files_text)
             failed_files_text_edit.append(
                 self.tr("\n\n以下是一些常见失败原因：\n\n"
-                        "1.转为ogg格式时：\n  原始文件采样率非44.1或者48kHz，而选择了与源相同，或者自定义码率超过500k。单声道文件码率超过192k\n\n"
+                        "1.转为ogg格式时：\n  原始文件采样率非44.1或者48kHz，而选择了与源相同，或者自定义码率超500k。单声道文件码率超过192k\n\n"
                         "2.转为opus格式时：\n  单声道文件码率超过256k，无论是手动设置还是尝试转换单声道文件\n\n"
-                        "3.转为aac格式时：\n  原始文件采样率非支持的数值（见下拉菜单），而选择了与源相同\n\n"
+                        "3.转为aac格式时：\n  原始文件采样率非支持的数值（见下拉菜单），而选择了与源相\n\n"
                         "4.转为flac格式时：\n  在自定义数值上设置了常规播放器不支持的数值，虽然可以转换，但可能只有专业软件能打开\n\n"
                         "5.其他：\n  请检查你的输入文件，它可能已损坏或被加密，如果是Unicode编码问题一般可以通过简单的改名解决\n\n"
                         "此外，请妥善利用文件信息页面，通过把媒体文件拖入能得到详细的信息帮助你确定错误。\n\n")
@@ -1377,16 +1391,73 @@ class AudioConverter(QWidget):
             if isinstance(child, QWidget) and child is not background_label:
                 child.raise_()
 
+    def create_temp_file(self):
+        # 确保使用跨平台的临时文件创建方式
+        temp_dir = tempfile.gettempdir()
+        temp_file = os.path.join(temp_dir, f'navigator_audio_{os.getpid()}.tmp')
+        return temp_file
+
+    def parse_ffmpeg_encoders(self, output):
+        """解析 FFmpeg 编码器输出"""
+        encoders = []
+        lines = output.split('\n')
+        
+        # 跳过头部信息，直到找到编码器列表
+        start_parsing = False
+        for line in lines:
+            if 'Encoders:' in line:
+                start_parsing = True
+                continue
+            if not start_parsing:
+                continue
+            
+            # 解析编码器行
+            if line.strip() and '=' in line:
+                # 格式示例: " V..... = h264  H.264 / AVC / MPEG-4 AVC / MPEG-4 part 10"
+                parts = line.split('=', 1)
+                if len(parts) == 2:
+                    codec_info = parts[1].strip()
+                    codec_name = codec_info.split()[0]
+                    # 只添加音频编码器
+                    if line.startswith(' A'):
+                        encoders.append(codec_name)
+        
+        return sorted(encoders)
+
+    def update_encoder_combobox(self):
+        """更新编码器下拉框"""
+        if hasattr(self, 'encoder_combo') and self.ffmpeg_encoders:
+            current_text = self.encoder_combo.currentText()
+            self.encoder_combo.clear()
+            self.encoder_combo.addItems(self.ffmpeg_encoders)
+            
+            # 尝试恢复之前选择的编码器
+            index = self.encoder_combo.findText(current_text)
+            if index >= 0:
+                self.encoder_combo.setCurrentIndex(index)
+            else:
+                # 默认选择 libmp3lame 或第一个可用的编码器
+                default_encoder = 'libmp3lame'
+                index = self.encoder_combo.findText(default_encoder)
+                if index >= 0:
+                    self.encoder_combo.setCurrentIndex(index)
+
 
 if __name__ == '__main__':
+    # 添加日志抑制
+    os.environ['QT_LOGGING_RULES'] = '*.debug=false;qt.qpa.xcb.warning=false'
+    logging.getLogger('PIL').setLevel(logging.WARNING)  # 抑制 PIL 警告
+    
     app = QApplication(sys.argv)
-
+    
     translator = QTranslator()
-    if translator.load(get_translator_path()):
+    translator_path = get_translator_path()
+    if translator_path and translator.load(translator_path):
         app.installTranslator(translator)
+        print(f"Successfully loaded translator from: {translator_path}")
     else:
-        print('Use default')
-
+        print('Using default translation')
+    
     ex = AudioConverter()
     app.setStyleSheet(qdarkstyle.load_stylesheet(qt_api='pyqt5', palette=LightPalette))
     remove_screen_splash()
