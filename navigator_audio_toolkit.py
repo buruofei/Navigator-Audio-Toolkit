@@ -21,6 +21,7 @@ import multiprocessing
 import queue
 from multiprocessing import Pool, Manager
 import logging
+import platform
 
 FORMAT_PARAMS = {
     'mp3': {
@@ -225,8 +226,11 @@ class DragDropWidget(QWidget):
                 file_path
             ]
 
-            json_result = subprocess.run(json_cmd, capture_output=True, text=True, encoding='utf-8', errors='replace',
-                                         creationflags=subprocess.CREATE_NO_WINDOW)
+            if platform.system() == 'Windows':
+                json_result = subprocess.run(json_cmd, capture_output=True, text=True, encoding='utf-8', errors='replace',
+                                          creationflags=subprocess.CREATE_NO_WINDOW)
+            else:
+                json_result = subprocess.run(json_cmd, capture_output=True, text=True, encoding='utf-8', errors='replace')
 
             if json_result.returncode != 0:
                 raise subprocess.CalledProcessError(json_result.returncode, json_cmd, json_result.stdout,
@@ -286,8 +290,12 @@ class DragDropWidget(QWidget):
                 file_path
             ]
 
-            detail_result = subprocess.run(detail_cmd, capture_output=True, text=True, encoding='utf-8',
+            if platform.system() == 'Windows':
+                detail_result = subprocess.run(detail_cmd, capture_output=True, text=True, encoding='utf-8',
                                            errors='replace', creationflags=subprocess.CREATE_NO_WINDOW)
+            else:
+                detail_result = subprocess.run(detail_cmd, capture_output=True, text=True, encoding='utf-8',
+                                           errors='replace')
 
             if detail_result.returncode != 0:
                 raise subprocess.CalledProcessError(detail_result.returncode, detail_cmd, detail_result.stdout,
@@ -942,7 +950,7 @@ class AudioConverter(QWidget):
         self.sample_rate_edit.setVisible(text == self.tr('自定义'))
 
     def save_preset(self):
-        preset_name, ok = QInputDialog.getText(self, self.tr('保存预设'), self.tr('输入预设名称:'))
+        preset_name, ok = QInputDialog.getText(self, self.tr('保存设'), self.tr('输入预设名称:'))
         if ok and preset_name:
             preset = {
                 'format': self.format_combo.currentText(),
